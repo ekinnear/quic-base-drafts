@@ -1213,48 +1213,77 @@ MUST continue to use a zero-length connection ID for the lifetime of the
 connection and MUST NOT send packets from any other local address.
 
 An endpoint whose peer has selected a non-zero-length connection ID will
-potentially use multiple connection IDs over the lifetime of a connection.
-These connection IDs are supplied by the peer using the NEW_CONNECTION_ID frame
+potentially send packets using different connection IDs over the lifetime of a
+connection. These connection IDs are supplied by the peer using the
+NEW_CONNECTION_ID frame ({{frame-new-connection-id}}).
+
+
+### Issuing Connection IDs
+
+An endpoint issues connection IDs to its peer for the peer to use when sending
+packets. This allows the endpoint control over the strategy used to interpret
+connection IDs marked on packets that it receives.  These connection IDs are
+communicated to the peer using NEW_CONNECTION_ID frames
 ({{frame-new-connection-id}}).
 
-An endpoint considers the entire set of connection IDs that its peer has issued
-to be valid for use at any time. When the peer issues a new connection ID, it
-MUST accept packets using this connection ID for the duration of the connection
-or until the peer invalidates the connection ID via a CONNECTION_ID_FINISHED
-frame.
+The initial connection ID issued to the peer is sent by the endpoint as the
+Source Connection ID during the handshake, ensuring that the peer always begins
+the connection with at least one connection ID to use when sending.  When the
+endpoint receives the `requested_connection_ids` transport parameter during the
+handshake, it SHOULD supply its peer with the requested number of connection IDs
+via NEW_CONNECTION_ID frames.
 
-Endpoints may choose to stop using a given connection ID to send packets at any
-time and signals this to the issuing endpoint via a CONNECTION_ID_FINISHED
-frame.  This frame indicates the connection ID that is no longer in use and
-serves as a request for the peer to issue additional connection IDs via a
-NEW_CONNECTION_ID frame.
-
-
-Each connection ID MUST be used on only one local address.  At any time, an
-endpoint MAY change to a new connection ID on a local address already in use. An
-endpoint that migrates to a new local address may wish to retire all connection
-IDs that were used on the previous address using the CONNECTION_ID_FINISHED
-frame. This allows the server to provide new connection IDs which are valid on
-any address until first use.
-
-When a receiver of a packet notices that its peer is now using a previously
-unused connection ID, it may choose to supply its peer with a new connection ID
-using a NEW_CONNECTION_ID frame to reduce the possibility of its peer running
-out of available connection IDs.
-
-If an endpoint receives a packet with a previously unused connection ID, it
-SHOULD use a different connection ID from its set of valid connection IDs when
-sending its responses.  This can help to ensure that when an endpoint migrates
-to a new path or changes connection ID on an existing path, the packets will use
-different connection IDs in both directions. Likewise, when an endpoint receives
-a CONNECTION_ID_FINISHED frame, it SHOULD retire any connection IDs that were
-used in packets generated in response to that connection ID.
+When an endpoint issues a connection ID, it MUST accept packets using this
+connection ID for the duration of the connection or until its peer invalidates
+the connection ID via a CONNECTION_ID_FINISHED frame
+({{frame-connection-id-finished}}).
 
 Implementations SHOULD ensure that peers have the requested number of connection
 IDs available to reduce the possibility of peers exhausting their supply of
 available connection IDs.  An implementation could do this by always supplying a
 new connection ID for each connection ID retired with a CONNECTION_ID_FINISHED
 frame.
+
+When a receiver of a packet notices that its peer is now using a previously
+unused connection ID, it MAY choose to supply its peer with a new connection ID
+using a NEW_CONNECTION_ID frame to reduce the possibility of its peer running
+out of available connection IDs.
+
+It its peer selected non-zero-length connection IDs, an endpoint that receives a
+packet with a previously unused connection ID, SHOULD switch to sending with a
+different connection ID from its set of valid connection IDs when sending
+responses.  This can help to ensure that when an endpoint migrates to a new path
+or changes connection ID on an existing path, the packets will use different
+connection IDs in both directions. Likewise, when an endpoint receives a
+CONNECTION_ID_FINISHED frame, it SHOULD retire any connection IDs that were used
+in packets generated in response to that connection ID.
+
+
+### Consuming Connection IDs
+
+If an endpoint's peer has selected a non-zero-length connection ID, the endpoint
+maintains a set of connection IDs received from the peer that it can use when
+sending packets.  The initial connection ID used when sending packets is sent by
+the peer as the Source Connection ID during the handshake. To ensure that
+sufficient connection IDs are available for future use, the endpoint
+SHOULD request additional connection IDs using the `requested_connection_ids`
+transport parameter.  The endpoint will then receive up to the requested number
+of connection IDs via NEW_CONNECTION_ID frames from its peer.
+
+All connection IDs issued by the peer are considered valid for use by the
+endpoint when sending packets until the connection ID is retired by the
+endpoint.  Endpoints may choose to stop using a given connection ID to send
+packets at any time and signal this to the issuing endpoint via a
+CONNECTION_ID_FINISHED frame ({{frame-connection-id-finished}}).  This frame
+indicates the connection ID that is no longer in use and serves as a request for
+the peer to issue additional connection IDs via a NEW_CONNECTION_ID frame.
+
+Additionally, each connection ID MUST be used on packets sent from only one
+local address.  At any time, an endpoint MAY change to a new connection ID on a
+local address already in use.  An endpoint that migrates to a new local address
+may wish to retire all connection IDs that were used on the previous address
+using the CONNECTION_ID_FINISHED frame.  This allows the server to provide new
+connection IDs which are valid on any address until first use.
 
 
 ## Matching Packets to Connections {#packet-handling}
@@ -1670,13 +1699,12 @@ disable_migration (0x0009):
 
 requested_connection_ids (0x000c):
 
-: A 32-bit unsigned integer value indicating the totoal number of connection IDs
-  the endpoint would like to maintain in active use at any given time, as
-  described in {{connection-id}}.  The receiver provides up to this many
-  connection IDs using NEW_CONNECTION_ID frames ({{frame-new-connection-id}}),
-  noting that the initial connection ID established during the handshake is
-  included in this count. If a zero-length connection ID is used, this parameter
-  may be ignored.
+: A 32-bit unsigned integer value indicating the total number of connection IDs
+  the endpoint would like its peer to issue, as described in {{connection-id}}.
+  The receiver provides up to this many connection IDs using NEW_CONNECTION_ID
+  frames ({{frame-new-connection-id}}), noting that the initial connection ID
+  established during the handshake is included in this count.  If a zero-length
+  connection ID is used, this parameter MUST be ignored.
 
 Either peer MAY advertise an initial value for the flow control on each type of
 stream on which they might receive data.  Each of the following transport
