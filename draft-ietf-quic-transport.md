@@ -1247,14 +1247,10 @@ previously unused connection ID, it MAY choose to supply its peer with a new
 connection ID using a NEW_CONNECTION_ID frame to reduce the possibility of its
 peer running out of available connection IDs.
 
-If its peer selected non-zero-length connection IDs, an endpoint that receives a
-packet with a previously unused connection ID, SHOULD switch to sending with a
-different connection ID from its set of valid connection IDs when sending
-responses.  This can help to ensure that when an endpoint migrates to a new path
-or changes connection ID on an existing path, the packets will use different
-connection IDs in both directions. Likewise, when an endpoint receives a
-CONNECTION_ID_FINISHED frame, it SHOULD retire any connection IDs that were used
-in packets generated in response to that connection ID.
+An endpoint that receives a packet with a previously unused connection ID,
+SHOULD also switch to sending with a different connection ID.  This can help to
+ensure that different connection IDs will be used in both directions when an
+endpoint migrates to a new path or changes connection ID on an existing path.
 
 
 ### Consuming Connection IDs
