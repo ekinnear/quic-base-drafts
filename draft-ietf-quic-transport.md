@@ -1192,7 +1192,7 @@ different IP or port at either endpoint, due to NAT rebinding or mobility, as
 described in {{migration}}.  Finally a connection may be terminated by either
 endpoint, as described in {{termination}}.
 
-## Connection ID {#connection-id}
+## Connection ID
 
 Each connection possesses a set of identifiers, any of which could be used to
 distinguish it from other connections.  A connection ID can be either 0 octets
@@ -1222,7 +1222,7 @@ NEW_CONNECTION_ID frame ({{frame-new-connection-id}}).
 
 An endpoint issues connection IDs to its peer for the peer to use when sending
 packets. This allows the endpoint control over the strategy used to interpret
-connection IDs marked on packets that it receives.  These connection IDs are
+connection IDs of packets that it receives.  These connection IDs are
 communicated to the peer using NEW_CONNECTION_ID frames
 ({{frame-new-connection-id}}).
 
@@ -1242,14 +1242,12 @@ Implementations SHOULD ensure that peers have the requested number of connection
 IDs available to reduce the possibility of peers exhausting their supply of
 available connection IDs.  An implementation could do this by always supplying a
 new connection ID for each connection ID retired with a CONNECTION_ID_FINISHED
-frame.
+frame. When a receiver of a packet notices that its peer is now using a
+previously unused connection ID, it MAY choose to supply its peer with a new
+connection ID using a NEW_CONNECTION_ID frame to reduce the possibility of its
+peer running out of available connection IDs.
 
-When a receiver of a packet notices that its peer is now using a previously
-unused connection ID, it MAY choose to supply its peer with a new connection ID
-using a NEW_CONNECTION_ID frame to reduce the possibility of its peer running
-out of available connection IDs.
-
-It its peer selected non-zero-length connection IDs, an endpoint that receives a
+If its peer selected non-zero-length connection IDs, an endpoint that receives a
 packet with a previously unused connection ID, SHOULD switch to sending with a
 different connection ID from its set of valid connection IDs when sending
 responses.  This can help to ensure that when an endpoint migrates to a new path
@@ -1263,12 +1261,11 @@ in packets generated in response to that connection ID.
 
 If an endpoint's peer has selected a non-zero-length connection ID, the endpoint
 maintains a set of connection IDs received from the peer that it can use when
-sending packets.  The initial connection ID used when sending packets is sent by
-the peer as the Source Connection ID during the handshake. To ensure that
-sufficient connection IDs are available for future use, the endpoint
-SHOULD request additional connection IDs using the `requested_connection_ids`
-transport parameter.  The endpoint will then receive up to the requested number
-of connection IDs via NEW_CONNECTION_ID frames from its peer.
+sending packets. To ensure that sufficient connection IDs are available for
+future use, the endpoint SHOULD request additional connection IDs using the
+`requested_connection_ids` transport parameter.  The endpoint will then receive
+up to the requested number of connection IDs via NEW_CONNECTION_ID frames from
+its peer.
 
 All connection IDs issued by the peer are considered valid for use by the
 endpoint when sending packets until the connection ID is retired by the
@@ -1281,9 +1278,8 @@ the peer to issue additional connection IDs via a NEW_CONNECTION_ID frame.
 Additionally, each connection ID MUST be used on packets sent from only one
 local address.  At any time, an endpoint MAY change to a new connection ID on a
 local address already in use.  An endpoint that migrates to a new local address
-may wish to retire all connection IDs that were used on the previous address
-using the CONNECTION_ID_FINISHED frame.  This allows the server to provide new
-connection IDs which are valid on any address until first use.
+SHOULD retire all connection IDs that were used on the previous address
+using the CONNECTION_ID_FINISHED frame.
 
 
 ## Matching Packets to Connections {#packet-handling}
