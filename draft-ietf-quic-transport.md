@@ -1228,22 +1228,22 @@ communicated to the peer using NEW_CONNECTION_ID frames
 
 The initial connection ID issued to the peer is sent by the endpoint as the
 Source Connection ID during the handshake, ensuring that the peer always begins
-the connection with at least one connection ID to use when sending.  When the
-endpoint receives the `requested_connection_ids` transport parameter during the
-handshake, it SHOULD supply its peer with the requested number of connection IDs
-via NEW_CONNECTION_ID frames.
+the connection with at least one connection ID to use when sending.  An endpoint
+SHOULD supply its peer with additional connection IDs via NEW_CONNECTION_ID
+frames. While each endpoint can choose how many connection IDs to issue, a
+recommended number of outstanding connection IDs is eight.
 
 When an endpoint issues a connection ID, it MUST accept packets using this
 connection ID for the duration of the connection or until its peer invalidates
 the connection ID via a CONNECTION_ID_FINISHED frame
 ({{frame-connection-id-finished}}).
 
-Implementations SHOULD ensure that peers have the requested number of connection
-IDs available to reduce the possibility of peers exhausting their supply of
+Implementations SHOULD ensure that peers have sufficient connection IDs
+available to reduce the possibility of peers exhausting their supply of
 available connection IDs.  An implementation could do this by always supplying a
 new connection ID for each connection ID retired with a CONNECTION_ID_FINISHED
 frame. When a receiver of a packet notices that its peer is now using a
-previously unused connection ID, it MAY choose to supply its peer with a new
+previously unused connection ID, it can choose to supply its peer with a new
 connection ID using a NEW_CONNECTION_ID frame to reduce the possibility of its
 peer running out of available connection IDs.
 
@@ -1257,19 +1257,13 @@ endpoint migrates to a new path or changes connection ID on an existing path.
 
 If an endpoint's peer has selected a non-zero-length connection ID, the endpoint
 maintains a set of connection IDs received from the peer that it can use when
-sending packets. To ensure that sufficient connection IDs are available for
-future use, the endpoint SHOULD request additional connection IDs using the
-`requested_connection_ids` transport parameter.  The endpoint will then receive
-up to the requested number of connection IDs via NEW_CONNECTION_ID frames from
-its peer.
-
-All connection IDs issued by the peer are considered valid for use by the
-endpoint when sending packets until the connection ID is retired by the
-endpoint.  Endpoints may choose to stop using a given connection ID to send
+sending packets.  All connection IDs issued by the peer are considered valid for
+use by the endpoint when sending packets until the connection ID is retired by
+the endpoint.  Endpoints can choose to stop using a given connection ID to send
 packets at any time and signal this to the issuing endpoint via a
-CONNECTION_ID_FINISHED frame ({{frame-connection-id-finished}}).  This frame
-indicates the connection ID that is no longer in use and serves as a request for
-the peer to issue additional connection IDs via a NEW_CONNECTION_ID frame.
+CONNECTION_ID_FINISHED frame.  This frame indicates the connection ID that is no
+longer in use and serves as a request for the peer to issue additional
+connection IDs via a NEW_CONNECTION_ID frame.
 
 Additionally, each connection ID MUST be used on packets sent from only one
 local address.  At any time, an endpoint MAY change to a new connection ID on a
@@ -1571,7 +1565,6 @@ language from Section 3 of {{!TLS13=I-D.ietf-tls-tls13}}.
       disable_migration(9),
       initial_max_stream_data_bidi_remote(10),
       initial_max_stream_data_uni(11),
-      requested_connection_ids(12),
       (65535)
    } TransportParameterId;
 
@@ -1688,15 +1681,6 @@ disable_migration (0x0009):
   NOT send any packets, including probing packets ({{probing}}), from a local
   address other than that used to perform the handshake.  This parameter is a
   zero-length value.
-
-requested_connection_ids (0x000c):
-
-: A 32-bit unsigned integer value indicating the total number of connection IDs
-  the endpoint would like its peer to issue, as described in {{connection-id}}.
-  The receiver provides up to this many connection IDs using NEW_CONNECTION_ID
-  frames ({{frame-new-connection-id}}), noting that the initial connection ID
-  established during the handshake is included in this count.  If a zero-length
-  connection ID is used, this parameter MUST be ignored.
 
 Either peer MAY advertise an initial value for the flow control on each type of
 stream on which they might receive data.  Each of the following transport
@@ -2598,8 +2582,11 @@ so.
 To support this process, a token is sent by endpoints.  The token is carried in
 the NEW_CONNECTION_ID frame sent by either peer, and servers can specify the
 stateless_reset_token transport parameter during the handshake (clients cannot
-because their transport parameters don't have confidentiality protection).  This
-value is protected by encryption, so only client and server know this value.
+because their transport parameters don't have confidentiality protection).
+Tokens sent via NEW_CONNECTION_ID frames are invalidated when their associated
+connection ID is retired via a CONNECTION_ID_FINISHED frame
+({{frame-connection-id-finished}}).  This value is protected by encryption, so
+only client and server know this value.
 
 An endpoint that receives packets that it cannot process sends a packet in the
 following layout:
@@ -3215,7 +3202,7 @@ Connection ID:
 
 Stateless Reset Token:
 
-: A 128-bit value that will be used to for a stateless reset when the associated
+: A 128-bit value that will be used for a stateless reset when the associated
   connection ID is used (see {{stateless-reset}}).
 
 An endpoint MUST NOT send this frame if it currently requires that its peer send
@@ -3233,6 +3220,9 @@ will no longer use a connection ID that was issued by its peer.  This also
 serves as a request to the peer to send additional connection IDs for future use
 (see {{connection-id}}).  New connection IDs can be delivered via the
 NEW_CONNECTION_ID frame ({{frame-new-connection-id}}).
+
+Retiring a connection ID using the CONNECTION_ID_FINISHED frame invalidates any
+stateless reset tokens associated with that connection ID.
 
 The CONNECTION_ID_FINISHED frame is as follows:
 
@@ -3262,10 +3252,6 @@ to or from zero-length makes it difficult to identify when the value of the
 connection ID changed.  An endpoint that is receiving packets with a zero-length
 Destination Connection ID MUST treat receipt of a CONNECTION_ID_FINISHED frame
 as a connection error of type PROTOCOL_VIOLATION.
-
-An endpoint MUST treat receipt of a CONNECTION_ID_FINISHED frame containing a
-connection ID that it did not issue to its peer as a connection error of type
-PROTOCOL_VIOLATION.
 
 
 ## STOP_SENDING Frame {#frame-stop-sending}
