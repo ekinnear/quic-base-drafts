@@ -162,7 +162,7 @@ The next four octets include a 32-bit Version field (see {{version}}).
 The next octet contains the length in octets of the two Connection IDs (see
 {{connection-id}}) that follow.  Each length is encoded as a 4-bit unsigned
 integer.  The length of the Destination Connection ID (DCIL) occupies the high
-bits of the octet and the length of the Source Connection ID (SCIL) occupying
+bits of the octet and the length of the Source Connection ID (SCIL) occupies
 the low bits of the octet.  An encoded length of 0 indicates that the connection
 ID is also 0 octets in length.  Non-zero encoded lengths are increased by 3 to
 get the full length of the connection ID; the final value is therefore either 0
@@ -313,7 +313,7 @@ reliably extracting information from a flow based on version-specific traits
 requires that middleboxes retain state for every connection ID they see.
 
 The Version Negotiation packet described in this document is not
-integrity-protected, it only has modest protection against insertion by off-path
+integrity-protected; it only has modest protection against insertion by off-path
 attackers.  QUIC versions MUST define a mechanism that authenticates the values
 it contains.
 

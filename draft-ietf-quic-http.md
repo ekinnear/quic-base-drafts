@@ -1,6 +1,6 @@
 ---
 title: Hypertext Transfer Protocol (HTTP) over QUIC
-abbrev: HTTP over QUIC
+abbrev: HTTP/QUIC
 docname: draft-ietf-quic-http-latest
 date: {DATE}
 category: std
@@ -143,8 +143,9 @@ coordinate their experiments on the quic@ietf.org mailing list.
 ## Discovering an HTTP/QUIC Endpoint
 
 An HTTP origin advertises the availability of an equivalent HTTP/QUIC endpoint
-via the Alt-Svc HTTP response header or the HTTP/2 ALTSVC frame ({{!RFC7838}}),
-using the ALPN token defined in {{connection-establishment}}.
+via the Alt-Svc HTTP response header field or the HTTP/2 ALTSVC frame
+({{!ALTSVC=RFC7838}}), using the ALPN token defined in
+{{connection-establishment}}.
 
 For example, an origin could indicate in an HTTP/1.1 or HTTP/2 response that
 HTTP/QUIC was available on UDP port 50781 at the same hostname by including the
@@ -306,9 +307,10 @@ Trailing header fields are carried in an additional header block following the
 body. Senders MUST send only one header block in the trailers section;
 receivers MUST discard any subsequent header blocks.
 
-An HTTP request/response exchange fully consumes a QUIC stream. After sending a
-request, a client closes the stream for sending; after sending a response, the
-server closes the stream for sending and the QUIC stream is fully closed.
+An HTTP request/response exchange fully consumes a bidirectional QUIC stream.
+After sending a request, a client closes the stream for sending; after sending a
+response, the server closes the stream for sending and the QUIC stream is fully
+closed.
 
 A server can send a complete response prior to the client sending an entire
 request if the response does not depend on any portion of the request that has
@@ -317,8 +319,14 @@ client abort transmission of a request without error by triggering a QUIC
 STOP_SENDING with error code HTTP_EARLY_RESPONSE, sending a complete response,
 and cleanly closing its streams. Clients MUST NOT discard complete responses as
 a result of having their request terminated abruptly, though clients can always
-discard responses at their discretion for other reasons.  Servers MUST NOT
-abort a response in progress as a result of receiving a solicited RST_STREAM.
+discard responses at their discretion for other reasons.
+
+Changes to the state of a request stream, including receiving a RST_STREAM with
+any error code, do not affect the state of the server's response. Servers do not
+abort a response in progress solely due to a state change on the request stream.
+However, if the request stream terminates without containing a usable HTTP
+request, the server SHOULD abort its response with the error code
+HTTP_INCOMPLETE_REQUEST.
 
 ### Header Formatting and Compression
 
@@ -377,8 +385,8 @@ state), the proxy will set the FIN bit on its connection to the TCP server. When
 the proxy receives a packet with the FIN bit set, it will terminate the send
 stream that it sends to client. TCP connections which remain half-closed in a
 single direction are not invalid, but are often handled poorly by servers, so
-clients SHOULD NOT cause send a STREAM frame with a FIN bit for connections on
-which they are still expecting data.
+clients SHOULD NOT close a stream for sending while they still expect to receive
+data from the target of the CONNECT.
 
 A TCP connection error is signaled with RST_STREAM. A proxy treats any error in
 the TCP connection, which includes receiving a TCP segment with the RST bit set,
@@ -388,17 +396,18 @@ detects an error with the stream or the QUIC connection.
 
 ### Request Cancellation
 
-Either client or server can cancel requests by closing the stream (QUIC
-RST_STREAM or STOP_SENDING frames, as appropriate) with an error type of
+Either client or server can cancel requests by aborting the stream (QUIC
+RST_STREAM or STOP_SENDING frames, as appropriate) with an error code of
 HTTP_REQUEST_CANCELLED ({{http-error-codes}}).  When the client cancels a
-request or response, it indicates that the response is no longer of interest.
+response, it indicates that this response is no longer of interest. Clients
+SHOULD cancel requests by aborting both directions of a stream.
 
-When the server cancels either direction of the request stream using
-HTTP_REQUEST_CANCELLED, it indicates that no application processing was
-performed.  The client can treat requests cancelled by the server as though they
-had never been sent at all, thereby allowing them to be retried later on a new
-connection.  Servers MUST NOT use the HTTP_REQUEST_CANCELLED status for requests
-which were partially or fully processed.
+When the server cancels its response stream using HTTP_REQUEST_CANCELLED, it
+indicates that no application processing was performed.  The client can treat
+requests cancelled by the server as though they had never been sent at all,
+thereby allowing them to be retried later on a new connection.  Servers MUST NOT
+use the HTTP_REQUEST_CANCELLED status for requests which were partially or fully
+processed.
 
   Note:
   : In this context, "processed" means that some data from the stream was
@@ -807,7 +816,7 @@ When a server receives this frame, it aborts sending the response for the
 identified server push.  If the server has not yet started to send the server
 push, it can use the receipt of a CANCEL_PUSH frame to avoid opening a
 stream.  If the push stream has been opened by the server, the server SHOULD
-sent a QUIC RST_STREAM frame on those streams and cease transmission of the
+send a QUIC RST_STREAM frame on those streams and cease transmission of the
 response.
 
 A server can send this frame to indicate that it won't be sending a response
@@ -892,7 +901,7 @@ not understand.
 SETTINGS frames always apply to a connection, never a single stream.  A SETTINGS
 frame MUST be sent as the first frame of either control stream (see
 {{stream-mapping}}) by each peer, and MUST NOT be sent subsequently or on any
-other stream. If an endpoint receives an SETTINGS frame on a different stream,
+other stream. If an endpoint receives a SETTINGS frame on a different stream,
 the endpoint MUST respond with a connection error of type HTTP_WRONG_STREAM.  If
 an endpoint receives a second SETTINGS frame, the endpoint MUST respond with a
 connection error of type HTTP_MALFORMED_FRAME.
@@ -934,10 +943,18 @@ When a 0-RTT QUIC connection is being used, the client's initial requests will
 be sent before the arrival of the server's SETTINGS frame.  Clients MUST store
 the settings the server provided in the session being resumed and MUST comply
 with stored settings until the server's current settings are received.
+Remembered settings apply to the new connection until the server's SETTINGS
+frame is received.
 
-Servers MAY continue processing data from clients which exceed its current
-configuration during the initial flight.  In this case, the client MUST apply
-the new settings immediately upon receipt.
+A server can remember the settings that it advertised, or store an
+integrity-protected copy of the values in the ticket and recover the information
+when accepting 0-RTT data. A server uses the HTTP/QUIC settings values in
+determining whether to accept 0-RTT data.
+
+A server MAY accept 0-RTT and subsequently provide different settings in its
+SETTINGS frame. If 0-RTT data is accepted by the server, its SETTINGS frame MUST
+NOT reduce any limits or alter any values that might be violated by the client
+with its 0-RTT data.
 
 When a 1-RTT QUIC connection is being used, the client MUST NOT send requests
 prior to receiving and processing the server's SETTINGS frame.
@@ -1185,6 +1202,9 @@ HTTP_PUSH_ALREADY_IN_CACHE (0x04):
 HTTP_REQUEST_CANCELLED (0x05):
 : The client no longer needs the requested data.
 
+HTTP_INCOMPLETE_REQUEST (0x06):
+: The client's stream terminated without containing a fully-formed request.
+
 HTTP_CONNECT_ERROR (0x07):
 : The connection established in response to a CONNECT request was reset or
   abnormally closed.
@@ -1195,7 +1215,7 @@ HTTP_EXCESSIVE_LOAD (0x08):
 
 HTTP_VERSION_FALLBACK (0x09):
 : The requested operation cannot be served over HTTP/QUIC.  The peer should
-  retry over HTTP/2.
+  retry over HTTP/1.1.
 
 HTTP_WRONG_STREAM (0x0A):
 : A frame was received on a stream where it is not permitted.
@@ -1219,6 +1239,10 @@ HTTP_CLOSED_CRITICAL_STREAM (0x0F):
 HTTP_WRONG_STREAM_DIRECTION (0x0010):
 : A unidirectional stream type was used by a peer which is not permitted to do
   so.
+
+HTTP_EARLY_RESPONSE (0x0011):
+: The remainder of the client's request is not needed to produce a response.
+  For use in STOP_SENDING only.
 
 HTTP_GENERAL_PROTOCOL_ERROR (0x00FF):
 : Peer violated protocol requirements in a way which doesn't match a more
@@ -1439,8 +1463,8 @@ QUIC has the same concepts of "stream" and "connection" errors that HTTP/2
 provides. However, because the error code space is shared between multiple
 components, there is no direct portability of HTTP/2 error codes.
 
-The HTTP/2 error codes defined in Section 7 of {{!RFC7540}} map to the HTTP over
-QUIC error codes as follows:
+The HTTP/2 error codes defined in Section 7 of {{!RFC7540}} map to the HTTP/QUIC
+error codes as follows:
 
 NO_ERROR (0x0):
 : HTTP_NO_ERROR in {{http-error-codes}}.
@@ -1494,11 +1518,14 @@ Error codes need to be defined for HTTP/2 and HTTP/QUIC separately.  See
 
 # Security Considerations
 
-The security considerations of HTTP over QUIC should be comparable to those of
-HTTP/2 with TLS.  Note that where HTTP/2 employs PADDING frames to make a
-connection more resistant to traffic analysis, HTTP/QUIC can rely on QUIC's own
-PADDING frames or employ the reserved frame and stream types discussed in
+The security considerations of HTTP/QUIC should be comparable to those of HTTP/2
+with TLS.  Note that where HTTP/2 employs PADDING frames to make a connection
+more resistant to traffic analysis, HTTP/QUIC can rely on QUIC's own PADDING
+frames or employ the reserved frame and stream types discussed in
 {{frame-grease}} and {{stream-grease}}.
+
+When HTTP Alternative Services is used for discovery for HTTP/QUIC endpoints,
+the security considerations of {{!ALTSVC}} also apply.
 
 The modified SETTINGS format contains nested length elements, which could pose
 a security risk to an incautious implementer.  A SETTINGS frame parser MUST
@@ -1517,7 +1544,7 @@ established in {{?RFC7301}}.
 The "hq" string identifies HTTP/QUIC:
 
   Protocol:
-  : HTTP over QUIC
+  : HTTP/QUIC
 
   Identification Sequence:
   : 0x68 0x71 ("hq")
@@ -1677,9 +1704,10 @@ The entries in the following table are registered by this document.
 | HTTP_INTERNAL_ERROR                 | 0x0003     | Internal error                           | {{http-error-codes}}   |
 | HTTP_PUSH_ALREADY_IN_CACHE          | 0x0004     | Pushed content already cached            | {{http-error-codes}}   |
 | HTTP_REQUEST_CANCELLED              | 0x0005     | Data no longer needed                    | {{http-error-codes}}   |
+| HTTP_INCOMPLETE_REQUEST             | 0x0006     | Stream terminated early                  | {{http-error-codes}}   |
 | HTTP_CONNECT_ERROR                  | 0x0007     | TCP reset or error on CONNECT request    | {{http-error-codes}}   |
 | HTTP_EXCESSIVE_LOAD                 | 0x0008     | Peer generating excessive load           | {{http-error-codes}}   |
-| HTTP_VERSION_FALLBACK               | 0x0009     | Retry over HTTP/2                        | {{http-error-codes}}   |
+| HTTP_VERSION_FALLBACK               | 0x0009     | Retry over HTTP/1.1                      | {{http-error-codes}}   |
 | HTTP_WRONG_STREAM                   | 0x000A     | A frame was sent on the wrong stream     | {{http-error-codes}}   |
 | HTTP_PUSH_LIMIT_EXCEEDED            | 0x000B     | Maximum Push ID exceeded                 | {{http-error-codes}}   |
 | HTTP_DUPLICATE_PUSH                 | 0x000C     | Push ID was fulfilled multiple times     | {{http-error-codes}}   |
@@ -1687,6 +1715,7 @@ The entries in the following table are registered by this document.
 | HTTP_WRONG_STREAM_COUNT             | 0x000E     | Too many unidirectional streams          | {{http-error-codes}}   |
 | HTTP_CLOSED_CRITICAL_STREAM         | 0x000F     | Critical stream was closed               | {{http-error-codes}}   |
 | HTTP_WRONG_STREAM_DIRECTION         | 0x0010     | Unidirectional stream in wrong direction | {{http-error-codes}}   |
+| HTTP_EARLY_RESPONSE                 | 0x0011     | Remainder of request not needed          | {{http-error-codes}}   |
 | HTTP_MALFORMED_FRAME                | 0x01XX     | Error in frame formatting or use         | {{http-error-codes}}   |
 | ----------------------------------- | ---------- | ---------------------------------------- | ---------------------- |
 
@@ -1743,6 +1772,15 @@ Sender:
 
 > **RFC Editor's Note:**  Please remove this section prior to publication of a
 > final version of this document.
+
+## Since draft-ietf-quic-http-13
+
+- Reserved some frame types for grease (#1333, #1446)
+- Unknown unidirectional stream types are tolerated, not errors; some reserved
+  for grease (#1490, #1525)
+- Require settings to be remembered for 0-RTT, prohibit reductions (#1541,
+  #1641)
+- Specify behavior for truncated requests (#1596, #1643)
 
 ## Since draft-ietf-quic-http-12
 

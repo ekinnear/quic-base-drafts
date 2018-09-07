@@ -65,9 +65,8 @@ normative:
 --- abstract
 
 This specification defines QPACK, a compression format for efficiently
-representing HTTP header fields, to be used in HTTP over QUIC. This is a
-variation of HPACK header compression that seeks to reduce head-of-line
-blocking.
+representing HTTP header fields, to be used in HTTP/QUIC. This is a variation of
+HPACK header compression that seeks to reduce head-of-line blocking.
 
 --- note_Note_to_Readers
 
@@ -104,14 +103,14 @@ with substantially less head-of-line blocking under the same loss conditions.
 
 # Header Tables
 
-Like HPACK, QPACK uses two tables for associating header fields to indexes.  The
+Like HPACK, QPACK uses two tables for associating header fields to indices.  The
 static table (see {{table-static}}) is predefined and contains common header
 fields (some of them with an empty value).  The dynamic table (see
-{{table-dynamic}}) built up over the course of the connection and can be used by
-the encoder to index header fields repeated in the encoded header lists.
+{{table-dynamic}}) is built up over the course of the connection and can be used
+by the encoder to index header fields repeated in the encoded header lists.
 
 Unlike in HPACK, entries in the QPACK static and dynamic tables are addressed
-separately.  The following sections describe how entries in each table is
+separately.  The following sections describe how entries in each table are
 addressed.
 
 ## Static Table {#table-static}
@@ -126,6 +125,16 @@ is no value at index zero of the static table.
 The dynamic table consists of a list of header fields maintained in first-in,
 first-out order.  The dynamic table is initially empty.  Entries are added by
 instructions on the encoder stream (see {{encoder-stream}}).
+
+The maximum size of the dynamic table can be modified by the encoder, subject to
+a decoder-controlled limit (see {{configuration}} and {{size-update}}).  The
+initial maximum size is determined by the corresponding setting when HTTP
+requests or responses are first permitted to be sent. For clients using 0-RTT
+data in HTTP/QUIC, the table size is the remembered value of the setting, even
+if the server later specifies a larger maximum in its SETTINGS frame.  For
+HTTP/QUIC servers and HTTP/QUIC clients when 0-RTT is not attempted or is
+rejected, the initial maximum table size is the value of the setting in the
+peer's SETTINGS frame.
 
 Before a new entry is added to the dynamic table, entries are evicted from the
 end of the dynamic table until the size of the dynamic table is less than or
@@ -184,8 +193,8 @@ on the encoder stream.
     + - +---------------+ - - - - - +
     | 0 |      ...      | n - d - 1 |  Relative Index
     +---+---------------+-----------+
-      ^                     |
-      |                     V
+      ^                       |
+      |                       V
 Insertion Point         Dropping Point
 
 n = count of entries inserted
@@ -213,7 +222,7 @@ entries do not change while interpreting headers on a request or push stream.
 n = count of entries inserted
 d = count of entries dropped
 ~~~~~
-{: title="Example Dynamic Table Indexing - Request Stream"}
+{: title="Example Dynamic Table Indexing - Relative Index on Request Stream"}
 
 ### Post-Base Indexing
 
@@ -237,7 +246,7 @@ as absolute indices, but the zero value is one higher than the Base Index.
 n = count of entries inserted
 d = count of entries dropped
 ~~~~~
-{: title="Dynamic Table Indexing - Post-Base References"}
+{: title="Example Dynamic Table Indexing - Post-Base Index on Request Stream"}
 
 If the decoder encounters a reference to an entry which has already been dropped
 from the table or which is greater than the declared Largest Reference (see
@@ -261,7 +270,7 @@ immediately. A stream becomes unblocked when the greatest absolute index in the
 dynamic table becomes greater than or equal to the Largest Reference for all
 header blocks the decoder has started reading from the stream.  If a decoder
 encounters a header block where the actual largest reference is not equal to the
-largest reference declared in the prefix, it MAY treat this as a stream error of
+Largest Reference declared in the prefix, it MAY treat this as a stream error of
 type HTTP_QPACK_DECOMPRESSION_FAILED.
 
 A decoder can permit the possibility of blocked streams by setting
@@ -286,8 +295,8 @@ SHOULD treat this as a stream error of type HTTP_QPACK_DECOMPRESSION_FAILED.
 
 ### State Synchronization
 
-The decoder stream signals key events at the decoder that permit the encoder to
-track the decoder's state.  These events are:
+The decoder stream ({{qpack-decoder-stream}}) signals key events at the
+decoder that permit the encoder to track the decoder's state.  These events are:
 
 - Complete processing of a header block
 - Abandonment of a stream which might have remaining header blocks
@@ -533,7 +542,7 @@ the dynamic table is not acknowledged as this instruction does not insert an
 entry.
 
 
-## QPACK Decoder Stream {#feedback}
+## QPACK Decoder Stream
 
 The decoder stream carries information used to ensure consistency of the dynamic
 table. Information is sent from the QPACK decoder to the QPACK encoder; that is,
@@ -882,9 +891,9 @@ Duplicate representation instead (see {{duplicate}}).
 
 For header blocks encoded in non-blocking mode, the encoder needs to forego
 indexed representations that refer to table updates which have not yet been
-acknowledged with {{feedback}}.  Since all table updates are processed in
-sequence on the encoder stream, an index into the dynamic table is sufficient to
-track which entries have been acknowledged.
+acknowledged (see {{qpack-decoder-stream}}).  Since all table updates are
+processed in sequence on the control stream, an index into the dynamic
+table is sufficient to track which entries have been acknowledged.
 
 To track blocked streams, the necessary Base Index value for each stream can be
 used.  Whenever the decoder processes a table update, it can begin decoding any
@@ -893,12 +902,12 @@ blocked streams that now have their dependencies satisfied.
 
 ## Speculative table updates {#speculative-updates}
 
-Implementations can *speculatively* send header frames on the HTTP Control
-Streams which are not needed for any current HTTP request or response.  Such
-headers could be used strategically to improve performance.  For instance, the
-encoder might decide to *refresh* by sending Duplicate representations for
-popular header fields ({{duplicate}}), ensuring they have small indices and
-hence minimal size on the wire.
+Implementations can *speculatively* send instructions on the encoder stream
+which are not needed for any current HTTP request or response.  Such headers
+could be used strategically to improve performance.  For instance, the encoder
+might decide to *refresh* by sending Duplicate representations for popular
+header fields ({{duplicate}}), ensuring they have small indices and hence
+minimal size on the wire.
 
 ## Sample One Pass Encoding Algorithm
 
@@ -1008,6 +1017,11 @@ Description:
 
 > **RFC Editor's Note:** Please remove this section prior to publication of a
 > final version of this document.
+
+## Since draft-ietf-quic-qpack-01
+
+- Only header blocks that reference the dynamic table are acknowledged (#1603,
+  #1605)
 
 ## Since draft-ietf-quic-qpack-00
 

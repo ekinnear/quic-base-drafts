@@ -93,8 +93,9 @@ informative:
 --- abstract
 
 This document defines the core of the QUIC transport protocol.  This document
-describes connection establishment, packet format, multiplexing and reliability.
-Accompanying documents describe the cryptographic handshake and loss detection.
+describes connection establishment, packet format, multiplexing, and
+reliability.  Accompanying documents describe the cryptographic handshake and
+loss detection.
 
 
 --- note_Note_to_Readers
@@ -180,7 +181,7 @@ Connection ID:
 
 QUIC packet:
 
-: A well-formed UDP payload that can be parsed by a QUIC receiver.
+: The smallest unit of data that can be exchanged by QUIC endpoints.
 
 QUIC is a name, not an acronym.
 
@@ -376,7 +377,7 @@ packet type.  Type-specific semantics for this version are described in the
 following sections.
 
 The end of the packet is determined by the Length field.  The Length field
-covers the both the Packet Number and Payload fields, both of which are
+covers both the Packet Number and Payload fields, both of which are
 confidentiality protected and initially of unknown length.  The size of the
 Payload field is learned once the packet number protection is removed.
 
@@ -431,7 +432,7 @@ Fourth Bit:
 \[\[Editor's Note: this section should be removed and the bit definitions
 changed before this draft goes to the IESG.]]
 
-Google QUIC Demultipexing Bit:
+Google QUIC Demultiplexing Bit:
 
 : The fifth bit (0x8) of octet 0 is set to 0. This allows implementations of
   Google QUIC to distinguish Google QUIC packets from short header packets sent
@@ -565,8 +566,8 @@ wishes to perform a stateless retry (see {{stateless-retry}}).
 
 A Retry packet (shown in {{retry-format}}) only uses the invariant portion of
 the long packet header {{QUIC-INVARIANTS}}; that is, the fields up to and
-including the Destination and Source Connection ID fields.  The contents of the
-Retry packet are not protected.  Like Version Negotiation, a Retry packet
+including the Destination and Source Connection ID fields.  A Retry packet does
+not contain any protected fields.  Like Version Negotiation, a Retry packet
 contains the long header including the connection IDs, but omits the Length,
 Packet Number, and Payload fields.  These are replaced with:
 
@@ -702,8 +703,9 @@ server may send multiple Initial packets.  The cryptographic key exchange could
 require multiple round trips or retransmissions of this data.
 
 The payload of an Initial packet includes a CRYPTO frame (or frames) containing
-a cryptographic handshake message, ACK frames, or both. The first CRYPTO frame
-sent always begins at an offset of 0 (see {{handshake}}).
+a cryptographic handshake message, ACK frames, or both.  PADDING frames are also
+permitted.  The first CRYPTO frame sent always begins at an offset of 0 (see
+{{handshake}}).
 
 The first packet sent by a client always includes a CRYPTO frame that contains
 the entirety of the first cryptographic handshake message.  This packet, and the
@@ -783,6 +785,14 @@ Note:
   might be unable to validate the token at all, leading to connection failure if
   the packet is discarded.  A server MAY encode tokens provided with NEW_TOKEN
   frames and Retry packets differently, and validate the latter more strictly.
+
+In a stateless design, a server can use encrypted and authenticated tokens to
+pass information to clients that the server can later recover and use to
+validate a client address.  Tokens are not integrated into the cryptographic
+handshake and so they are not authenticated.  For instance, a client might be
+able to reuse a token.  To avoid attacks that exploit this property, a server
+can limit its use of tokens to only the information needed validate client
+addresses.
 
 
 ### Starting Packet Numbers
@@ -917,11 +927,10 @@ packets, though failing to do so will require sending a significantly
 larger number of datagrams during the handshake. Receivers MUST
 be able to process coalesced packets.
 
-Senders SHOULD coalesce packets in order of increasing encryption levels
-(Initial, Handshake, 0-RTT, 1-RTT), as this makes it more likely the receiver
-will be able to process all the packets in a single pass.  A packet with a short
-header does not include a length, so it will always be the last packet included
-in a UDP datagram.
+Coalescing packets in order of increasing encryption levels (Initial, 0-RTT,
+Handshake, 1-RTT) makes it more likely the receiver will be able to process all
+the packets in a single pass.  A packet with a short header does not include a
+length, so it will always be the last packet included in a UDP datagram.
 
 Senders MUST NOT coalesce QUIC packets with different Destination Connection
 IDs into a single UDP datagram. Receivers SHOULD ignore any subsequent packets
@@ -990,10 +999,11 @@ The connection ID can change over the lifetime of a connection, especially in
 response to connection migration ({{migration}}). NEW_CONNECTION_ID frames
 ({{frame-new-connection-id}}) are used to provide new connection ID values.
 
+
 ## Packet Numbers {#packet-numbers}
 
 The packet number is an integer in the range 0 to 2^62-1. The value is used in
-determining the cryptographic nonce for packet encryption.  Each endpoint
+determining the cryptographic nonce for packet protection.  Each endpoint
 maintains a separate packet number for sending and receiving.
 
 Packet numbers are divided into 3 spaces in QUIC:
@@ -1003,18 +1013,18 @@ Packet numbers are divided into 3 spaces in QUIC:
 - Application data space: All 0-RTT and 1-RTT encrypted packets
   {{packet-protected}} are in this space.
 
-As described in {{QUIC-TLS}}, each packet type uses different encryption keys.
+As described in {{QUIC-TLS}}, each packet type uses different protection keys.
 
-Conceptually, a packet number space is the encryption context in which
-a packet can be processed and ACKed.  Initial packets can only be sent
-with Initial encryption keys and ACKed in packets which are also
-Initial packets.  Similarly, Handshake packets can only be sent and
-acknowledged in Handshake packets.
+Conceptually, a packet number space is the context in which a packet can be
+processed and acknowledged.  Initial packets can only be sent with Initial
+packet protection keys and acknowledged in packets which are also Initial
+packets.  Similarly, Handshake packets are sent at the Handshake encryption
+level and can only be acknowledged in Handshake packets.
 
-This enforces cryptographic separation between the data sent in the
-different packet sequence number spaces.  Each packet number space
-starts at packet number 0.  Subsequent packets sent in the
-same packet number space MUST increase the packet number by at least one.
+This enforces cryptographic separation between the data sent in the different
+packet sequence number spaces.  Each packet number space starts at packet number
+0.  Subsequent packets sent in the same packet number space MUST increase the
+packet number by at least one.
 
 0-RTT and 1-RTT data exist in the same packet number space to make loss recovery
 algorithms easier to implement between the two packet types.
@@ -1043,10 +1053,10 @@ Note that these encodings are similar to those in {{integer-encoding}}, but
 use different values.
 
 The encoded packet number is protected as described in Section 5.3
-{{QUIC-TLS}}. Protection of the packet number is removed prior to recovering
-the full packet number. The full packet number is reconstructed at the
-receiver based on the number of significant bits present, the content of those
-bits, and the largest packet number received on a successfully authenticated
+{{QUIC-TLS}}. Protection of the packet number is removed prior to recovering the
+full packet number. The full packet number is reconstructed at the receiver
+based on the number of significant bits present, the value of those bits, and
+the largest packet number received on a successfully authenticated
 packet. Recovering the full packet number is necessary to successfully remove
 packet protection.
 
@@ -1076,6 +1086,13 @@ sending a packet with a number of 0x6b2d79 requires a packet number encoding
 with 14 bits or more; whereas the 30-bit packet number encoding is needed to
 send a packet with a number of 0x6bc107.
 
+A receiver MUST discard a newly unprotected packet unless it is certain that it
+has not processed another packet with the same packet number from the same
+packet number space. Duplicate suppression MUST happen after removing packet
+protection for the reasons described in Section 9.3 of {{QUIC-TLS}}. An
+efficient algorithm for duplicate suppression can be found in Section 3.4.3 of
+{{?RFC2406}}.
+
 A Version Negotiation packet ({{packet-version}}) does not include a packet
 number.  The Retry packet ({{packet-retry}}) has special rules for populating
 the packet number field.
@@ -1100,9 +1117,9 @@ Stateless Reset do not contain frames.
 |                          Frame N (*)                        ...
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ~~~
-{: #packet-frames title="Contents of Protected Payload"}
+{: #packet-frames title="QUIC Payload"}
 
-Protected payloads MUST contain at least one frame, and MAY contain multiple
+QUIC payloads MUST contain at least one frame, and MAY contain multiple
 frames and multiple frame types.
 
 Frames MUST fit within a single QUIC packet and MUST NOT span a QUIC packet
@@ -1158,7 +1175,7 @@ The Frame Type field uses a variable length integer encoding (see
 {{integer-encoding}}) with one exception.  To ensure simple and efficient
 implementations of frame parsing, a frame type MUST use the shortest possible
 encoding.  Though a two-, four- or eight-octet encoding of the frame types
-defined in this document is possible, the Frame Type field for these frames are
+defined in this document is possible, the Frame Type field for these frames is
 encoded on a single octet.  For instance, though 0x4007 is a legitimate
 two-octet encoding for a variable-length integer with a value of 7, PING frames
 are always encoded as a single octet with the value 0x07.  An endpoint MUST
@@ -1189,7 +1206,7 @@ connection establishment intertwines version negotiation with the cryptographic
 and transport handshakes to reduce connection establishment latency, as
 described in {{handshake}}.  Once established, a connection may migrate to a
 different IP or port at either endpoint, due to NAT rebinding or mobility, as
-described in {{migration}}.  Finally a connection may be terminated by either
+described in {{migration}}.  Finally, a connection may be terminated by either
 endpoint, as described in {{termination}}.
 
 ## Connection ID
@@ -1295,7 +1312,7 @@ correspond to a single connection.
 Valid packets sent to clients always include a Destination Connection ID that
 matches the value the client selects.  Clients that choose to receive
 zero-length connection IDs can use the address/port tuple to identify a
-connection.  Packets that don't match an existing connection MAY be discarded.
+connection.  Packets that don't match an existing connection are discarded.
 
 Due to packet reordering or loss, clients might receive packets for a connection
 that are encrypted with a key it has not yet computed. Clients MAY drop these
@@ -1308,25 +1325,25 @@ that packet.
 
 ### Server Packet Handling {#server-pkt-handling}
 
-If a server receives a packet that has an unsupported version and
-sufficient length to be an Initial packet for some version supported
-by the server, it SHOULD send a Version Negotiation packet as
-described in {{send-vn}}. Servers MAY rate control these packets to
-avoid storms of Version Negotiation packets.
+If a server receives a packet that has an unsupported version, but the packet is
+sufficiently large to initiate a new connection for any version supported by the
+server, it SHOULD send a Version Negotiation packet as described in
+{{send-vn}}. Servers MAY rate control these packets to avoid storms of Version
+Negotiation packets.
 
 The first packet for an unsupported version can use different semantics and
 encodings for any version-specific field.  In particular, different packet
 protection keys might be used for different versions.  Servers that do not
-support a particular version are unlikely to be able to decrypt the content of
+support a particular version are unlikely to be able to decrypt the payload of
 the packet.  Servers SHOULD NOT attempt to decode or decrypt a packet from an
 unknown version, but instead send a Version Negotiation packet, provided that
 the packet is sufficiently long.
 
 Servers MUST drop other packets that contain unsupported versions.
 
-Packets with a supported version, or no version field, are matched to
-a connection as described in {{packet-handling}}. If not matched, the
-server continues below.
+Packets with a supported version, or no version field, are matched to a
+connection as described in {{packet-handling}}. If not matched, the server
+continues below.
 
 If the packet is an Initial packet fully conforming with the specification, the
 server proceeds with the handshake ({{handshake}}). This commits the server to
@@ -1336,14 +1353,13 @@ If a server isn't currently accepting any new connections, it SHOULD send a
 Handshake packet containing a CONNECTION_CLOSE frame with error code
 SERVER_BUSY.
 
-If the packet is a 0-RTT packet, the server MAY buffer a limited
-number of these packets in anticipation of a late-arriving Initial
-Packet. Clients are forbidden from sending Handshake packets prior to
-receiving a server response, so servers SHOULD ignore any such packets.
+If the packet is a 0-RTT packet, the server MAY buffer a limited number of these
+packets in anticipation of a late-arriving Initial Packet. Clients are forbidden
+from sending Handshake packets prior to receiving a server response, so servers
+SHOULD ignore any such packets.
 
-Servers MUST drop incoming packets under all other circumstances. They
-SHOULD send a Stateless Reset ({{stateless-reset}}) if a connection ID
-is present in the header.
+Servers MUST drop incoming packets under all other circumstances.  They SHOULD
+send a Stateless Reset ({{stateless-reset}}) if they are able.
 
 ## Version Negotiation
 
@@ -1353,10 +1369,10 @@ response to each packet that might initiate a new connection, see
 {{packet-handling}} for details.
 
 The size of the first packet sent by a client will determine whether a server
-sends a Version Negotiation packet. Clients that support multiple QUIC
-versions SHOULD pad their Initial packets to reflect the largest minimum
-Initial packet size of all their versions. This ensures that the server
-responds if there are any mutually supported versions.
+sends a Version Negotiation packet. Clients that support multiple QUIC versions
+SHOULD pad the first packet they send to the largest of the minimum packet sizes
+across all versions they support. This ensures that the server responds if there
+is a mutually supported version.
 
 ### Sending Version Negotiation Packets {#send-vn}
 
@@ -1380,10 +1396,10 @@ packet MUST be discarded.
 Once the Version Negotiation packet is determined to be valid, the client then
 selects an acceptable protocol version from the list provided by the server.
 The client then attempts to create a connection using that version.  Though the
-contents of the Initial packet the client sends might not change in
-response to version negotiation, a client MUST increase the packet number it
-uses on every packet it sends.  Packets MUST continue to use long headers and
-MUST include the new negotiated protocol version.
+content of the Initial packet the client sends might not change in response to
+version negotiation, a client MUST increase the packet number it uses on every
+packet it sends.  Packets MUST continue to use long headers and MUST include the
+new negotiated protocol version.
 
 The client MUST use the long header format and include its selected version on
 all packets until it has 1-RTT keys and it has received a packet from the server
@@ -1462,7 +1478,7 @@ that meets the requirements of the cryptographic handshake protocol:
   client can receive packets that are addressed with the transport address that
   is claimed by the client (see {{address-validation}})
 
-The initial CRYPTO frame MUST be sent in a single packet.  Any second attempt
+The first CRYPTO frame MUST be sent in a single packet.  Any second attempt
 that is triggered by address validation MUST also be sent within a single
 packet. This avoids having to reassemble a message from multiple packets.
 
@@ -1481,11 +1497,12 @@ some examples are provided here.
 
 {{tls-1rtt-handshake}} provides an overview of the 1-RTT handshake.  Each line
 shows a QUIC packet with the packet type and packet number shown first, followed
-by the contents. So, for instance the first packet is of type Initial, with
-packet number 0, and contains a CRYPTO frame carrying the ClientHello.
+by the frames that are typically contained in those packets. So, for instance
+the first packet is of type Initial, with packet number 0, and contains a CRYPTO
+frame carrying the ClientHello.
 
 Note that multiple QUIC packets -- even of different encryption levels -- may be
-coalesced into a single UDP datagram (see {{packet-coalesce}}, and so this
+coalesced into a single UDP datagram (see {{packet-coalesce}}), and so this
 handshake may consist of as few as 4 UDP datagrams, or any number more. For
 instance, the server's first flight contains packets from the Initial encryption
 level (obfuscation), the Handshake level, and "0.5-RTT data" from the server at
@@ -1547,7 +1564,7 @@ handling.
 
 The format of the transport parameters is the TransportParameters struct from
 {{figure-transport-parameters}}.  This is described using the presentation
-language from Section 3 of {{!TLS13=I-D.ietf-tls-tls13}}.
+language from Section 3 of {{!TLS13=RFC8446}}.
 
 ~~~
    uint32 QuicVersion;
@@ -1873,26 +1890,30 @@ congestion in the network by setting a codepoint in the IP header of a packet
 instead of dropping it.  Endpoints react to congestion by reducing their sending
 rate in response, as described in {{QUIC-RECOVERY}}.
 
-To use ECN, QUIC endpoints first determine whether a path and peer support ECN
-marking. Verifying the path occurs at the beginning of a connection and when the
-connection migrates to a new path (see {{migration}}).
+To use ECN, QUIC endpoints first determine whether a path supports ECN marking
+and the peer is able to access the ECN codepoint in the IP header.  A network
+path does not support ECN if ECN marked packets get dropped or ECN markings are
+rewritten on the path. An endpoint verifies the path, both during connection
+establishment and when migrating to a new path (see {{migration}}).
 
-Each endpoint independently verifies and enables ECN for the path from it to the
-peer.
+Each endpoint independently verifies and enables use of ECN by setting the IP
+header ECN codepoint to ECN Capable Transport (ECT) for the path from it to the
+other peer. Even if ECN is not used on the path to the peer, the endpoint MUST
+provide feedback about ECN markings received (if accessible).
 
-To verify that both a path and the peer support ECN, an endpoint MUST set one of
-the ECN Capable Transport (ECT) codepoints -- ECT(0) or ECT(1) -- in the IP
-header {{!RFC8311}} of all outgoing packets.
+To verify both that a path supports ECN and the peer can provide ECN feedback,
+an endpoint MUST set the ECT(0) codepoint in the IP header of all outgoing
+packets {{!RFC8311}}.
 
 If an ECT codepoint set in the IP header is not corrupted by a network device,
 then a received packet contains either the codepoint sent by the peer or the
 Congestion Experienced (CE) codepoint set by a network device that is
 experiencing congestion.
 
-On receiving a packet with an ECT or CE codepoint, an endpoint that supports ECN
-increases the corresponding ECT(0), ECT(1), or CE count, and includes these
-counters in subsequent (see {{processing-and-ack}}) ACK_ECN frames (see
-{{frame-ack-ecn}}).
+On receiving a packet with an ECT or CE codepoint, an endpoint that can access
+the IP ECN codepoints increases the corresponding ECT(0), ECT(1), or CE count,
+and includes these counters in subsequent (see {{processing-and-ack}}) ACK_ECN
+frames (see {{frame-ack-ecn}}).
 
 A packet detected by a receiver as a duplicate does not affect the receiver's
 local ECN codepoint counts; see ({{security-ecn}}) for relevant security
@@ -1901,9 +1922,8 @@ concerns.
 If an endpoint receives a packet without an ECT or CE codepoint, it responds per
 {{processing-and-ack}} with an ACK frame.
 
-If an endpoint does not support ECN or does not have access to received ECN
-codepoints, it acknowledges received packets per {{processing-and-ack}} with an
-ACK frame.
+If an endpoint does not have access to received ECN codepoints, it acknowledges
+received packets per {{processing-and-ack}} with an ACK frame.
 
 If a packet sent with an ECT codepoint is newly acknowledged by the peer in an
 ACK frame, the endpoint stops setting ECT codepoints in subsequent packets, with
@@ -2518,9 +2538,13 @@ A connection that remains idle for longer than the advertised idle timeout (see
 draining state when the idle timeout expires.
 
 Each endpoint advertises their own idle timeout to their peer. The idle timeout
-starts from the last packet received, or the first packet sent after the last
-received packet.  The latter condition ensures that initiating new activity
-postpones a timeout.
+starts from the last packet received.  In order to ensure that initiating new
+activity postpones an idle timeout, an endpoint restarts this timer when sending
+a packet.  An endpoint does not postpone the idle timeout if another packet has
+been sent containing frames other than ACK or PADDING, and that other packet has
+not been acknowledged or declared lost.  Packets that contain only ACK or
+PADDING frames are not acknowledged until an endpoint has other frames to send,
+so they could prevent the timeout from being refreshed.
 
 The value for an idle timeout can be asymmetric.  The value advertised by an
 endpoint is only used to determine whether the connection is live at that
@@ -2709,10 +2733,10 @@ endpoint receives.
 
 This design relies on the peer always sending a connection ID in its packets so
 that the endpoint can use the connection ID from a packet to reset the
-connection.  An endpoint that uses this design cannot allow its peers to send
-packets with a zero-length destination connection ID and need to either use
-the same connection ID length for all connections or encode the length of
-the connection ID such that it can be recovered without state.
+connection.  An endpoint that uses this design MUST either use the same
+connection ID length for all connections or encode the length of the connection
+ID such that it can be recovered without state.  In addition, it MUST NOT
+provide a zero-length connection ID.
 
 Revealing the Stateless Reset Token allows any entity to terminate the
 connection, so a value can only be used once.  This method for choosing the
@@ -2750,6 +2774,9 @@ Stateless Reset.  Conversely, refusing to send a Stateless Reset in response to
 a small packet might result in Stateless Reset not being useful in detecting
 cases of broken connections where only very small packets are sent; such
 failures might only be detected by other means, such as timers.
+
+An endpoint can increase the odds that a packet will trigger a Stateless Reset
+if it cannot be processed by padding it to at least 38 octets.
 
 
 # Frame Types and Formats
@@ -3306,11 +3333,9 @@ packet number spaces.  ACK frames only acknowledge the packet numbers that were
 transmitted by the sender in the same packet number space of the packet that the
 ACK was received in.
 
-A client MUST NOT acknowledge Retry packets.  Retry packets include the packet
-number from the Initial packet it responds to.  Version Negotiation packets
-cannot be acknowledged because they do not contain a packet number.  Rather than
-relying on ACK frames, these packets are implicitly acknowledged by the next
-Initial packet sent by the client.
+Version Negotiation and Retry packets cannot be acknowledged because they do not
+contain a packet number.  Rather than relying on ACK frames, these packets are
+implicitly acknowledged by the next Initial packet sent by the client.
 
 An ACK frame is shown below.
 
@@ -3453,12 +3478,15 @@ ACK Block (repeated):
 ### Sending ACK Frames
 
 Implementations MUST NOT generate packets that only contain ACK frames in
-response to packets which only contain ACK frames. However, they MUST
-acknowledge packets containing only ACK frames when sending ACK frames in
-response to other packets.  Implementations MUST NOT send more than one packet
-containing only ACK frames per received packet that contains frames other than
-ACK frames.  Packets containing non-ACK frames MUST be acknowledged immediately
-or when a delayed ack timer expires.
+response to packets which only contain ACK and PADDING frames. However, they
+MUST acknowledge packets containing only ACK and PADDING frames when sending
+ACK frames in response to other packets.  Implementations MUST NOT send more
+than one packet containing only an ACK frame per received packet that contains
+frames other than a ACK and PADDING frames.  Packets containing frames
+besides ACK and PADDDING MUST be acknowledged immediately or when a delayed
+ack timer expires. The delayed ack timer MUST NOT delay an ACK for longer
+than an RTT or the alarm granularity.  This ensures an ACK frame is sent at
+least once per RTT if new packets needing acknowledgement were received.
 
 To limit ACK blocks to those that have not yet been received by the sender, the
 receiver SHOULD track which ACK frames have been acknowledged by its peer.  Once
@@ -3470,9 +3498,8 @@ is only sending ACK frames will only receive acknowledgements for its packets
 if the sender includes them in packets with non-ACK frames.  A sender SHOULD
 bundle ACK frames with other frames when possible.
 
-Endpoints can only acknowledge packets sent in a particular packet
-number space by sending ACK frames in packets from the same packet
-number space.
+Endpoints can only acknowledge packets sent in a particular packet number
+space by sending ACK frames in packets from the same packet number space.
 
 To limit receiver state or the size of ACK frames, a receiver MAY limit the
 number of ACK blocks it sends.  A receiver can do this even without receiving
@@ -3501,8 +3528,8 @@ a reduced delay; see Section 4.3.1 of {{QUIC-RECOVERY}}.
 
 ## ACK_ECN Frame {#frame-ack-ecn}
 
-The ACK_ECN frame (type=0x1a) is used by an endpoint that supports ECN to
-acknowledge packets received with ECN codepoints of ECT(0), ECT(1), or CE in the
+The ACK_ECN frame (type=0x1a) is used by an endpoint that provides ECN feedback
+for packets received with ECN codepoints of ECT(0), ECT(1), or CE in the
 packet's IP header.
 
 ~~~
@@ -3545,8 +3572,7 @@ CE Count:
 ## PATH_CHALLENGE Frame {#frame-path-challenge}
 
 Endpoints can use PATH_CHALLENGE frames (type=0x0e) to check reachability to the
-peer and for path validation during connection establishment and connection
-migration.
+peer and for path validation during connection migration.
 
 PATH_CHALLENGE frames contain an 8-byte payload.
 
@@ -3766,10 +3792,9 @@ latency.
 ## Packet Processing and Acknowledgment {#processing-and-ack}
 
 A packet MUST NOT be acknowledged until packet protection has been successfully
-removed and all frames contained in the packet have been processed.  Any stream
-state transitions triggered by the frame MUST have occurred.  For STREAM frames,
-this means the data has been enqueued in preparation to be received by the
-application protocol, but it does not require that data is delivered and
+removed and all frames contained in the packet have been processed.  For STREAM
+frames, this means the data has been enqueued in preparation to be received by
+the application protocol, but it does not require that data is delivered and
 consumed.
 
 Once the packet has been fully processed, a receiver acknowledges receipt by
@@ -3885,7 +3910,7 @@ The details of loss detection and congestion control are described in
 The QUIC packet size includes the QUIC header and integrity check, but not the
 UDP or IP header.
 
-Clients MUST ensure that the first Initial packet it sends is sent in a UDP
+Clients MUST ensure that the first Initial packet they send is sent in a UDP
 datagram that is at least 1200 octets. Padding the Initial packet or including a
 0-RTT packet in the same datagram are ways to meet this requirement.  Sending a
 UDP datagram of this size ensures that the network path supports a reasonable
@@ -3926,7 +3951,7 @@ QUIC endpoints that implement any kind of PMTU discovery SHOULD maintain an
 estimate for each combination of local and remote IP addresses.  Each pairing of
 local and remote addresses could have a different maximum MTU in the path.
 
-QUIC depends on the network path supporting a MTU of at least 1280 octets. This
+QUIC depends on the network path supporting an MTU of at least 1280 octets. This
 is the IPv6 minimum MTU and therefore also supported by most modern IPv4
 networks.  An endpoint MUST NOT reduce its MTU below this number, even if it
 receives signals that indicate a smaller limit might exist.
@@ -4113,7 +4138,7 @@ data to a peer.
        v                           v
    +-------+                   +-------+
    | Data  | Send RST_STREAM   | Reset |
-   | Sent  +------------------>| Sent  |
+   | Sent  |------------------>| Sent  |
    +-------+                   +-------+
        |                           |
        | Recv All ACKs             | Recv ACK
@@ -4195,14 +4220,14 @@ application protocol some of which cannot be observed by the sender.
        v                           |
    +-------+                       |
    | Size  | Recv RST_STREAM       |
-   | Known +---------------------->|
+   | Known |---------------------->|
    +-------+                       |
        |                           |
        | Recv All Data             |
        v                           v
    +-------+                   +-------+
    | Data  | Recv RST_STREAM   | Reset |
-   | Recvd +<-- (optional) --->| Recvd |
+   | Recvd |<-- (optional) --->| Recvd |
    +-------+                   +-------+
        |                           |
        | App Read All Data         | App Read RST
@@ -4863,9 +4888,9 @@ sent packets match the encryption level of the sent packet.  This mitigation is
 useful if the connection has an ephemeral forward-secure key that is generated
 and used for every new connection.  If a packet sent is protected with a
 forward-secure key, then any acknowledgments that are received for them MUST
-also be forward-secure protected.  Since the attacker will not have the forward
-secure key, the attacker will not be able to generate forward-secure protected
-packets with ACK frames.
+also be forward-secure protected.  Since the attacker will not have the
+forward-secure key, the attacker will not be able to generate forward-secure
+protected packets with ACK frames.
 
 
 ## Optimistic ACK Attack
@@ -5156,10 +5181,33 @@ DecodePacketNumber(largest_pn, truncated_pn, pn_nbits):
 
 Issue and pull request numbers are listed with a leading octothorp.
 
+## Since draft-ietf-quic-transport-13
+
+- Streams open when higher-numbered streams of the same type open (#1342, #1549)
+- Split initial stream flow control limit into 3 transport parameters (#1016,
+  #1542)
+- All flow control transport parameters are optional (#1610)
+- Removed UNSOLICITED_PATH_RESPONSE error code (#1265, #1539)
+- Permit stateless reset in response to any packet (#1348, #1553)
+- Recommended defense against stateless reset spoofing (#1386, #1554)
+- Prevent infinite stateless reset exchanges (#1443, #1627)
+- Forbid processing of the same packet number twice (#1405, #1624)
+- Added a packet number decoding example (#1493)
+- More precisely define idle timeout (#1429, #1614, #1652)
+- Corrected format of Retry packet and prevented looping (#1492, #1451, #1448,
+  #1498)
+- Permit 0-RTT after receiving Version Negotiation or Retry (#1507, #1514,
+  #1621)
+- Permit Retry in response to 0-RTT (#1547, #1552)
+- Looser verification of ECN counters to account for ACK loss (#1555, #1481,
+  #1565)
+- Remove frame type field from APPLICATION_CLOSE (#1508, #1528)
+
+
 ## Since draft-ietf-quic-transport-12
 
 - Changes to integration of the TLS handshake (#829, #1018, #1094, #1165, #1190,
-  #1233, #1242, #1252, #1450)
+  #1233, #1242, #1252, #1450, #1458)
   - The cryptographic handshake uses CRYPTO frames, not stream 0
   - QUIC packet protection is used in place of TLS record protection
   - Separate QUIC packet number spaces are used for the handshake

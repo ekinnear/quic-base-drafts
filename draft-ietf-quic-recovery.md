@@ -302,7 +302,7 @@ Using max(SRTT, latest_RTT) protects from the two following cases:
 The 1.125 multiplier increases reordering resilience. Implementers MAY
 experiment with using other multipliers, bearing in mind that a lower multiplier
 reduces reordering resilience and increases spurious retransmissions, and a
-higher multipler increases loss recovery delay.
+higher multiplier increases loss recovery delay.
 
 This mechanism is based on Early Retransmit for TCP {{?RFC5827}}. However,
 {{?RFC5827}} does not include the timer described above. Early Retransmit is
@@ -341,7 +341,7 @@ acknowledgement for a new packet, the sender SHOULD double the handshake timeout
 and set a timer for this period.
 
 When CRYPTO frames are outstanding, the TLP and RTO timers are not active unless
-the CRYPTO frames were sent at 1RTT encryption.
+the CRYPTO frames were sent at 1-RTT encryption.
 
 When an acknowledgement is received for a handshake packet, the new RTT is
 computed and the timer SHOULD be set for twice the newly computed smoothed RTT.
@@ -452,9 +452,9 @@ flight, since this packet adds network load without establishing packet loss.
 
 QUIC SHOULD delay sending acknowledgements in response to packets, but MUST NOT
 excessively delay acknowledgements of packets containing frames other than ACK
-or ACN_ECN.  Specifically, implementaions MUST attempt to enforce a maximum ack
-delay to avoid causing the peer spurious timeouts.  The RECOMMENDED maximum ack
-delay in QUIC is 25ms.
+or ACN_ECN.  Specifically, implementations MUST attempt to enforce a maximum
+ack delay to avoid causing the peer spurious timeouts.  The RECOMMENDED maximum
+ack delay in QUIC is 25ms.
 
 An acknowledgement MAY be sent for every second full-sized packet, as TCP does
 {{?RFC5681}}, or may be sent less frequently, as long as the delay does not
@@ -490,7 +490,7 @@ caused by losing previously sent ACK frames, at the cost of larger ACK frames.
 ACK frames SHOULD always acknowledge the most recently received packets, and the
 more out-of-order the packets are, the more important it is to send an updated
 ACK frame quickly, to prevent the peer from declaring a packet as lost and
-spuriusly retransmitting the frames it contains.
+spuriously retransmitting the frames it contains.
 
 Below is one recommended approach for determining what packets to include in an
 ACK frame.
@@ -518,32 +518,35 @@ Constants used in loss recovery are based on a combination of RFCs, papers, and
 common practice.  Some may need to be changed or negotiated in order to better
 suit a variety of environments.
 
-kMaxTLPs (RECOMMENDED 2):
+kMaxTLPs:
 : Maximum number of tail loss probes before an RTO expires.
+  The RECOMMENDED value is 2.
 
-kReorderingThreshold (RECOMMENDED 3):
+kReorderingThreshold:
 : Maximum reordering in packet number space before FACK style loss detection
-  considers a packet lost.
+  considers a packet lost. The RECOMMENDED value is 3.
 
-kTimeReorderingFraction (RECOMMENDED 1/8):
+kTimeReorderingFraction:
 : Maximum reordering in time space before time based loss detection considers
-  a packet lost.  In fraction of an RTT.
+  a packet lost.  In fraction of an RTT. The RECOMMENDED value is 1/8.
 
-kUsingTimeLossDetection (RECOMMENDED false):
+kUsingTimeLossDetection:
 : Whether time based loss detection is in use.  If false, uses FACK style
-  loss detection.
+  loss detection. The RECOMMENDED value is false.
 
-kMinTLPTimeout (RECOMMENDED 10ms):
+kMinTLPTimeout:
 : Minimum time in the future a tail loss probe timer may be set for.
+  The RECOMMENDED value is 10ms.
 
-kMinRTOTimeout (RECOMMENDED 200ms):
-:  Minimum time in the future an RTO timer may be set for.
+kMinRTOTimeout:
+:  Minimum time in the future an RTO timer may be set for. The RECOMMENDED
+   value is 200ms.
 
-kDelayedAckTimeout (RECOMMENDED 25ms):
-: The length of the peer's delayed ack timer.
+kDelayedAckTimeout:
+: The length of the peer's delayed ack timer. The RECOMMENDED value is 25ms.
 
-kInitialRtt (RECOMMENDED 100ms):
-: The RTT used before an RTT sample is taken.
+kInitialRtt:
+: The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
 
 ### Variables of interest
 
@@ -562,7 +565,7 @@ tlp_count:
   receiving an ack.
 
 rto_count:
-: The number of times an rto has been sent without receiving an ack.
+: The number of times an RTO has been sent without receiving an ack.
 
 largest_sent_before_rto:
 : The last packet number sent prior to the first retransmission
@@ -761,7 +764,7 @@ Pseudocode for OnPacketAcked follows:
      if (rto_count > 0 &&
          acked_packet.packet_number > largest_sent_before_rto):
        OnRetransmissionTimeoutVerified(
-           acket_packet.packet_number)
+           acked_packet.packet_number)
      handshake_count = 0
      tlp_count = 0
      rto_count = 0
@@ -790,11 +793,11 @@ response to 0-RTT packets.
 #### Tail Loss Probe and Retransmission Timer
 
 Tail loss probes {{?TLP}} and retransmission timeouts {{?RFC6298}}
-are a timer based mechanism to recover from cases when there are
+are timer based mechanisms to recover from cases when there are
 outstanding retransmittable packets, but an acknowledgement has
 not been received in a timely manner.
 
-The TLP and RTO timers are armed when there is not unacknowledged handshake
+The TLP and RTO timers are armed when there is no unacknowledged handshake
 data.  The TLP timer is set until the max number of TLP packets have been
 sent, and then the RTO timer is set.
 
@@ -1037,22 +1040,23 @@ Constants used in congestion control are based on a combination of RFCs,
 papers, and common practice.  Some may need to be changed or negotiated
 in order to better suit a variety of environments.
 
-kMaxDatagramSize (RECOMMENDED 1200 bytes):
+kMaxDatagramSize:
 : The sender's maximum payload size. Does not include UDP or IP
   overhead. The max packet size is used for calculating initial and
-  minimum congestion windows.
+  minimum congestion windows. The RECOMMENDED value is 1200 bytes.
 
-kInitialWindow (RECOMMENDED min(10 * kMaxDatagramSize,
-                                max(2* kMaxDatagramSize, 14600))):
+kInitialWindow:
 : Default limit on the initial amount of outstanding data in bytes.
-  Taken from {{?RFC6928}}.
+  Taken from {{?RFC6928}}.  The RECOMMENDED value is the minimum of
+  10 * kMaxDatagramSize and max(2* kMaxDatagramSize, 14600)).
 
-kMinimumWindow (RECOMMENDED 2 * kMaxDatagramSize):
-: Minimum congestion window in bytes.
+kMinimumWindow:
+: Minimum congestion window in bytes. The RECOMMENDED value is
+  2 * kMaxDatagramSize.
 
-kLossReductionFactor (RECOMMENDED 0.5):
+kLossReductionFactor:
 : Reduction in congestion window when a new loss event is detected.
-
+  The RECOMMENDED value is 0.5.
 
 ### Variables of interest {#vars-of-interest}
 
@@ -1249,8 +1253,12 @@ This document has no IANA actions.  Yet.
 ## Since draft-ietf-quic-recovery-13
 
 - Corrected the lack of ssthresh reduction in CongestionEvent pseudocode (#1598)
-- Early retransmit threshold different from time-loss reordering threshold
-  (#945)
+- Considerations for ECN spoofing (#1426, #1626)
+- Clarifications for PADDING and congestion control (#837, #838, #1517, #1531,
+  #1540)
+- Reduce early retransmission timer to RTT/8 (#945, #1581)
+- Packets are declared lost after an RTO is verified (#935, #1582)
+
 
 ## Since draft-ietf-quic-recovery-12
 
