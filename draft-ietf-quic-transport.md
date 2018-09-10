@@ -2210,7 +2210,7 @@ rebinding does not cause the connection to fail.
 This document limits migration of connections to new client addresses, except as
 described in {{preferred-address}}. Clients are responsible for initiating all
 migrations.  Servers do not send non-probing packets (see {{probing}}) toward a
-client address until it sees a non-probing packet from that address.  If a
+client address until they see a non-probing packet from that address.  If a
 client receives packets from an unknown server address, the client MAY discard
 these packets.
 
@@ -2767,7 +2767,7 @@ valid packet.  This means that a Stateless Reset might trigger the sending of a
 Stateless Reset in response, which could lead to infinite exchanges.
 
 An endpoint MUST ensure that every Stateless Reset that it sends is smaller than
-the packet triggered it, unless it maintains state sufficient to prevent
+the packet which triggered it, unless it maintains state sufficient to prevent
 looping.  In the event of a loop, this results in packets eventually being too
 small to trigger a response.
 
@@ -3377,7 +3377,7 @@ ACK Delay:
 : A variable-length integer including the time in microseconds that the largest
   acknowledged packet, as indicated in the Largest Acknowledged field, was
   received by this peer to when this ACK was sent.  The value of the ACK Delay
-  field is scaled by multiplying the encoded value by the 2 to the power of the
+  field is scaled by multiplying the encoded value by 2 to the power of the
   value of the `ack_delay_exponent` transport parameter set by the sender of the
   ACK frame.  The `ack_delay_exponent` defaults to 3, or a multiplier of 8 (see
   {{transport-parameter-definitions}}).  Scaling in this fashion allows for a
@@ -3478,7 +3478,7 @@ Gap (repeated):
   packets preceding the packet number one lower than the smallest in the
   preceding ACK Block.
 
-ACK Block (repeated):
+Additional ACK Block (repeated):
 
 : A variable-length integer indicating the number of contiguous acknowledged
   packets preceding the largest packet number, as determined by the
@@ -3953,8 +3953,8 @@ previous PMTU determinations.
 In the absence of these mechanisms, QUIC endpoints SHOULD NOT send IP packets
 larger than 1280 octets. Assuming the minimum IP header size, this results in
 a QUIC packet size of 1232 octets for IPv6 and 1252 octets for IPv4. Some
-QUIC implementations MAY wish to be more conservative in computing allowed
-QUIC packet size given unknown tunneling overheads or IP header options.
+QUIC implementations MAY be more conservative in computing allowed QUIC packet
+size given unknown tunneling overheads or IP header options.
 
 QUIC endpoints that implement any kind of PMTU discovery SHOULD maintain an
 estimate for each combination of local and remote IP addresses.  Each pairing of
@@ -4234,10 +4234,10 @@ application protocol some of which cannot be observed by the sender.
        |                           |
        | Recv All Data             |
        v                           v
-   +-------+                   +-------+
-   | Data  | Recv RST_STREAM   | Reset |
-   | Recvd |<-- (optional) --->| Recvd |
-   +-------+                   +-------+
+   +-------+  Recv RST_STREAM  +-------+
+   | Data  |--- (optional) --->| Reset |
+   | Recvd |  Recv All Data    | Recvd |
+   +-------+<-- (optional) ----+-------+
        |                           |
        | App Read All Data         | App Read RST
        v                           v
