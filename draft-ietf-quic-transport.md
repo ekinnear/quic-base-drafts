@@ -1264,10 +1264,11 @@ previously unused connection ID, it can choose to supply its peer with a new
 connection ID using a NEW_CONNECTION_ID frame to reduce the possibility of its
 peer running out of available connection IDs.
 
-An endpoint that receives a packet with a previously unused connection ID,
-SHOULD also switch to sending with a different connection ID.  This can help to
-ensure that different connection IDs will be used in both directions when an
-endpoint migrates to a new path or changes connection ID on an existing path.
+An endpoint that receives a packet with a different remote address than
+previously used SHOULD also switch to sending with a different connection ID.
+This can help to ensure that different connection IDs will be used in both
+directions when an endpoint migrates to a new path or changes connection ID on
+an existing path.
 
 
 ### Consuming Connection IDs
@@ -1281,6 +1282,14 @@ packets at any time and signal this to the issuing endpoint via a
 CONNECTION_ID_FINISHED frame.  This frame indicates the connection ID that is no
 longer in use and serves as a request for the peer to issue additional
 connection IDs via a NEW_CONNECTION_ID frame.
+
+An endpoint that retires a connection ID should retain knowledge of that
+connection ID for a reasonable time after sending the CONNECTION_ID_FINISHED
+frame, or until that frame is acknowledged.  A recommended time is three times
+the current Retransmission Timeout (RTO) interval as defined in
+{{QUIC-RECOVERY}}.  This prevents potential retransmissions of a
+NEW_CONNECTION_ID frame from overlapping with the CONNECTION_ID_FINISHED frame
+for the same connection ID.
 
 Additionally, each connection ID MUST be used on packets sent from only one
 local address.  At any time, an endpoint MAY change to a new connection ID on a
@@ -2606,11 +2615,11 @@ so.
 To support this process, a token is sent by endpoints.  The token is carried in
 the NEW_CONNECTION_ID frame sent by either peer, and servers can specify the
 stateless_reset_token transport parameter during the handshake (clients cannot
-because their transport parameters don't have confidentiality protection).
+because their transport parameters don't have confidentiality protection).  This
+value is protected by encryption, so only client and server know this value.
 Tokens sent via NEW_CONNECTION_ID frames are invalidated when their associated
 connection ID is retired via a CONNECTION_ID_FINISHED frame
-({{frame-connection-id-finished}}).  This value is protected by encryption, so
-only client and server know this value.
+({{frame-connection-id-finished}}).
 
 An endpoint that receives packets that it cannot process sends a packet in the
 following layout:
