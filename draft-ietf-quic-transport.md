@@ -3274,9 +3274,9 @@ The fields are:
 
 Length:
 
-: An 8-bit unsigned integer containing the length of the connection ID.  Values
-  less than 4 and greater than 18 are invalid and MUST be treated as a
-  connection error of type PROTOCOL_VIOLATION.
+: An 8-bit unsigned integer containing the length of the connection ID.  Receipt
+  of a value not previously issued to the peer as a valid connection ID MAY be
+  treated as a connection error of type PROTOCOL_VIOLATION.
 
 Connection ID:
 
