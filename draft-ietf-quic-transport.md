@@ -3274,13 +3274,14 @@ The fields are:
 
 Length:
 
-: An 8-bit unsigned integer containing the length of the connection ID.  Receipt
-  of a value not previously issued to the peer as a valid connection ID MAY be
-  treated as a connection error of type PROTOCOL_VIOLATION.
+: An 8-bit unsigned integer containing the length of the connection ID.
 
 Connection ID:
 
 : A connection ID of the specified length.
+
+Receipt of a value not previously issued to the peer as a valid connection ID
+MAY be treated as a connection error of type PROTOCOL_VIOLATION.
 
 An endpoint MUST NOT send this frame if it currently sending packets with a
 zero-length Destination Connection ID.  Changing the length of a connection ID
