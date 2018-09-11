@@ -3283,7 +3283,7 @@ Connection ID:
 Receipt of a value not previously issued to the peer as a valid connection ID
 MAY be treated as a connection error of type PROTOCOL_VIOLATION.
 
-An endpoint MUST NOT send this frame if it currently sending packets with a
+An endpoint MUST NOT send this frame if it is currently sending packets with a
 zero-length Destination Connection ID.  Changing the length of a connection ID
 to or from zero-length makes it difficult to identify when the value of the
 connection ID changed.  An endpoint that is receiving packets with a zero-length
