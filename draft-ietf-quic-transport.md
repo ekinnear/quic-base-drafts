@@ -3280,8 +3280,9 @@ Connection ID:
 
 : A connection ID of the specified length.
 
-Receipt of a value not previously issued to the peer as a valid connection ID
-MAY be treated as a connection error of type PROTOCOL_VIOLATION.
+Receipt of a CONNECTION_ID_FINISHED frame containing a connection ID that was
+not previously sent to the peer MAY be treated as a connection error of type
+PROTOCOL_VIOLATION.
 
 An endpoint MUST NOT send this frame if it is currently sending packets with a
 zero-length Destination Connection ID.  Changing the length of a connection ID
